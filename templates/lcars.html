@@ -170,7 +170,7 @@
     const picker = document.createElement('input');
     picker.type = 'color';
     picker.className = 'picker';
-    picker.value = '#ff2fd0';
+    picker.value = device.lastColor || '#ffffff';
     picker.title = 'Custom colour';
     picker.setAttribute('aria-label', 'Custom colour');
     const tag = document.createElement('span');
@@ -193,6 +193,8 @@
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
       show(card, `${device.name}: chroma ${hex.toUpperCase()}.`, 'success');
+      const picker = card.querySelector('.picker');
+      if (picker) picker.value = hex;
     } catch (error) {
       show(card, `System fault: ${error.message}`, 'error');
     } finally {

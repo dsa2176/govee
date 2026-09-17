@@ -1,5 +1,7 @@
+import json
 import os
 import re
+import tempfile
 import uuid
 from typing import Any
 
@@ -14,6 +16,8 @@ app = Flask(__name__)
 API_BASE = "https://openapi.api.govee.com/router/api/v1"
 API_KEY = os.getenv("GOVEE_API_KEY", "").strip()
 REQUEST_TIMEOUT = 10
+STATE_FILE = os.getenv("STATE_FILE", "last_colors.json")
+DEFAULT_COLOR = "#ffffff"
 AVAILABLE_VIEWS = ("pipboy", "lcars")
 VIEW = os.getenv("VIEW", "pipboy").strip().casefold()
 VISIBLE_DEVICE_NAMES = {
@@ -62,6 +66,32 @@ def supports_power(device: dict[str, Any]) -> bool:
         and capability.get("instance") == "powerSwitch"
         for capability in device.get("capabilities", [])
     )
+
+
+def read_last_colors() -> dict[str, str]:
+    """Last colour sent to each device id. Shared by both views, survives restarts."""
+    try:
+        with open(STATE_FILE, encoding="utf-8") as handle:
+            data = json.load(handle)
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_last_color(device_id: str, color: str) -> None:
+    """Atomic write so the two services can't interleave a partial file."""
+    colors = read_last_colors()
+    colors[device_id] = color
+    directory = os.path.dirname(os.path.abspath(STATE_FILE)) or "."
+    try:
+        handle = tempfile.NamedTemporaryFile(
+            "w", dir=directory, delete=False, encoding="utf-8"
+        )
+        with handle:
+            json.dump(colors, handle)
+        os.replace(handle.name, STATE_FILE)
+    except OSError:
+        pass
 
 
 def supports_color(device: dict[str, Any]) -> bool:
@@ -167,6 +197,7 @@ def index():
 def device_info():
     try:
         devices = dashboard_devices()
+        last_colors = read_last_colors()
         return jsonify(
             ok=True,
             devices=[
@@ -175,6 +206,9 @@ def device_info():
                     "sku": device.get("sku"),
                     "id": device.get("device"),
                     "color": supports_color(device),
+                    "lastColor": last_colors.get(
+                        str(device.get("device")), DEFAULT_COLOR
+                    ),
                 }
                 for device in devices
             ],
@@ -220,6 +254,7 @@ def color():
 
     try:
         result = set_color(device_id, sku, value)
+        write_last_color(device_id, f"#{value:06x}")
         return jsonify(
             ok=True,
             color=f"#{value:06x}",
