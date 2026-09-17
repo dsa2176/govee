@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050505">
+  <title>LCARS Home Control</title>
+  <style>
+    :root {
+      font-family: Arial, Helvetica, sans-serif;
+      color-scheme: dark;
+      --bg:#050505; --panel:#101015; --orange:#ff9900; --peach:#ff9966;
+      --purple:#cc99cc; --violet:#9999ff; --blue:#66ccff; --yellow:#ffcc66;
+      --text:#f7f4ff; --muted:#bdb7ca; --danger:#ff7474;
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; width:100%; height:100%; background:var(--bg); color:var(--text); overflow:hidden; }
+    body, button, textarea { font-family:inherit; }
+    .shell { width:100vw; height:100dvh; padding:12px 14px 14px; display:grid; grid-template-rows:94px 1fr; }
+    .topbar { display:grid; grid-template-columns:170px 1fr; min-height:0; }
+    .top-elbow { background:var(--orange); border-radius:60px 0 0 0; position:relative; }
+    .top-elbow::after { content:""; position:absolute; right:0; bottom:0; width:42px; height:48px; background:var(--bg); border-radius:28px 0 0 0; }
+    .title-zone { border-bottom:22px solid var(--orange); padding:0 14px 7px 18px; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
+    h1 { margin:0; font-weight:500; font-size:clamp(1.8rem,4vw,3.4rem); line-height:.86; text-transform:uppercase; white-space:nowrap; }
+    .system-id { color:var(--orange); font-size:.78rem; font-weight:800; text-transform:uppercase; white-space:nowrap; }
+    .body-grid { min-height:0; display:grid; grid-template-columns:170px minmax(0,1fr); }
+    .rail { background:var(--orange); border-radius:0 0 0 60px; padding:12px 10px 70px 0; display:flex; flex-direction:column; gap:7px; min-height:0; }
+    .rail div { height:44px; border-radius:0 24px 24px 0; display:flex; align-items:center; justify-content:flex-end; padding-right:16px; color:#080808; font-size:.7rem; font-weight:900; text-transform:uppercase; }
+    .rail div:nth-child(1){background:var(--peach)} .rail div:nth-child(2){background:var(--purple)} .rail div:nth-child(3){background:var(--violet)} .rail div:nth-child(4){background:var(--blue)} .rail div:nth-child(5){background:var(--yellow)}
+    main { min-width:0; min-height:0; padding:18px 0 0 22px; display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr); gap:18px; }
+    .controls, .notes-panel { min-height:0; }
+    .controls { display:grid; grid-template-rows:auto 1fr auto; gap:12px; }
+    .status-strip { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.74rem; text-transform:uppercase; min-height:18px; }
+    .status-light { width:10px; height:10px; border-radius:50%; background:var(--blue); box-shadow:0 0 10px var(--blue); flex:0 0 auto; }
+    #loading { color:var(--yellow); text-transform:uppercase; }
+    #devices { min-height:0; display:grid; grid-template-rows:repeat(3,minmax(0,1fr)); gap:12px; }
+    .lamp { min-height:0; position:relative; overflow:hidden; background:var(--panel); border:3px solid var(--purple); border-radius:0 28px 0 28px; padding:18px 20px 14px; display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,.7fr); grid-template-rows:auto 1fr; gap:4px 20px; align-items:center; }
+    .lamp::before { content:""; position:absolute; top:0; left:0; width:38%; height:9px; background:var(--peach); border-radius:0 0 9px 0; }
+    .lamp::after { content:""; position:absolute; right:0; bottom:0; width:25%; height:9px; background:var(--violet); border-radius:9px 0 0 0; }
+    .lamp-info { min-width:0; align-self:center; }
+    .lamp h2 { margin:4px 0; font-size:clamp(1.25rem,2vw,2rem); font-weight:500; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sku { color:var(--purple); font-size:.7rem; font-weight:800; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .buttons { grid-column:2; grid-row:1 / span 2; display:grid; grid-template-columns:1fr 1fr; gap:9px; align-self:stretch; padding:5px 0; }
+    button { border:0; border-radius:30px; min-height:56px; padding:8px 12px; color:#080808; font-size:.9rem; font-weight:900; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:transform .1s, filter .1s, opacity .1s; }
+    button:hover{filter:brightness(1.12)} button:active{transform:scale(.97)} button:disabled{opacity:.45;cursor:wait} button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+    .on{background:var(--peach)} .off{background:var(--violet)}
+    .status { margin:5px 0 0; min-height:1.2em; color:var(--muted); font-size:.7rem; text-transform:uppercase; align-self:start; }
+    .success{color:var(--blue)!important}.error{color:var(--danger)!important}
+    .footer-line { display:grid; grid-template-columns:1fr 90px 56px; gap:7px; }
+    .footer-line span { height:12px; border-radius:6px; } .footer-line span:nth-child(1){background:var(--purple)} .footer-line span:nth-child(2){background:var(--peach)} .footer-line span:nth-child(3){background:var(--blue)}
+    .notes-panel { display:grid; grid-template-rows:auto 1fr auto; background:var(--panel); border:3px solid var(--blue); border-radius:28px 0 28px 0; overflow:hidden; }
+    .notes-head { background:var(--blue); color:#070707; padding:12px 18px 10px; display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:.88rem; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+    .notes-head small { font-size:.62rem; }
+    textarea { width:100%; height:100%; resize:none; border:0; outline:0; background:#09090d; color:var(--text); padding:18px; font-size:1rem; line-height:1.45; letter-spacing:.02em; }
+    textarea::placeholder{color:#777181}
+    .notes-foot { min-height:44px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; gap:10px; border-top:8px solid var(--purple); color:var(--muted); font-size:.68rem; text-transform:uppercase; }
+    .clear-note { min-height:30px; border-radius:18px; padding:5px 13px; background:var(--yellow); font-size:.66rem; }
+    @media (max-width:900px) {
+      html,body{overflow:auto}.shell{height:auto;min-height:100dvh}.body-grid{grid-template-columns:62px minmax(0,1fr)}.topbar{grid-template-columns:62px 1fr}.rail div{font-size:0;padding:0}.title-zone{padding-left:12px}.system-id{display:none}
+      main{grid-template-columns:1fr;grid-template-rows:auto minmax(340px,46vh);padding-left:12px;padding-bottom:12px}.notes-panel{min-height:340px}#devices{grid-template-rows:none;grid-auto-rows:minmax(150px,auto)}
+    }
+    @media (max-width:560px) {
+      .shell{padding:7px;grid-template-rows:78px 1fr}.top-elbow{border-radius:30px 0 0 0}.title-zone{border-bottom-width:16px}.lamp{grid-template-columns:1fr;grid-template-rows:auto auto auto;padding:18px 14px}.buttons{grid-column:1;grid-row:auto;min-height:58px}.notes-panel{min-height:300px}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="top-elbow" aria-hidden="true"></div>
+      <div class="title-zone">
+        <h1>Home Control</h1>
+        <div class="system-id">LCARS · Residential Systems · Pi 5</div>
+      </div>
+    </header>
+
+    <div class="body-grid">
+      <aside class="rail" aria-hidden="true">
+        <div>Home</div><div>Lights</div><div>Media</div><div>Notes</div><div>Online</div>
+      </aside>
+
+      <main>
+        <section class="controls">
+          <div class="status-strip"><span class="status-light"></span><span>Livingroom / Sleeping room / TV control interface</span></div>
+          <div id="loading">Scanning home systems…</div>
+          <div id="devices"></div>
+          <div class="footer-line" aria-hidden="true"><span></span><span></span><span></span></div>
+        </section>
+
+        <aside class="notes-panel">
+          <div class="notes-head"><span>Personal Log / Notes</span><small id="saveState">Ready</small></div>
+          <textarea id="notes" spellcheck="true" placeholder="Typ hier je notities…"></textarea>
+          <div class="notes-foot"><span>Notities worden lokaal in deze browser opgeslagen</span><button class="clear-note" id="clearNotes">Wissen</button></div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+<script>
+  const devicesEl = document.getElementById('devices');
+  const loadingEl = document.getElementById('loading');
+  const notesEl = document.getElementById('notes');
+  const saveStateEl = document.getElementById('saveState');
+  const notesKey = 'lcars-home-notes-v1';
+
+  function lampCard(device, index) {
+    const card = document.createElement('section');
+    card.className = 'lamp';
+    card.innerHTML = `
+      <div class="lamp-info"><h2></h2><div class="sku"></div></div>
+      <div class="buttons"><button class="on">Engage</button><button class="off">Standby</button></div>
+      <p class="status">System ready</p>`;
+    card.querySelector('h2').textContent = device.name;
+    card.querySelector('.sku').textContent = `Unit ${String(index + 1).padStart(2, '0')} · ${device.sku}`;
+    card.querySelector('.on').addEventListener('click', () => setPower(card, device, 'on'));
+    card.querySelector('.off').addEventListener('click', () => setPower(card, device, 'off'));
+    return card;
+  }
+
+  function show(card, message, kind='') {
+    const status = card.querySelector('.status');
+    status.textContent = message;
+    status.className = `status ${kind}`;
+  }
+
+  async function loadDevices() {
+    try {
+      const response = await fetch('/api/devices');
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error);
+      loadingEl.remove();
+      if (!data.devices.length) {
+        devicesEl.innerHTML = '<div class="error">Geen van de drie geselecteerde apparaten gevonden. Controleer de Govee device-namen.</div>';
+        return;
+      }
+      data.devices.forEach((device,index) => devicesEl.appendChild(lampCard(device,index)));
+    } catch (error) {
+      loadingEl.textContent = `System fault: ${error.message}`;
+      loadingEl.className = 'error';
+    }
+  }
+
+  async function setPower(card, device, state) {
+    const buttons = [...card.querySelectorAll('button')];
+    buttons.forEach(button => button.disabled = true);
+    show(card, state === 'on' ? 'Engaging system…' : 'Entering standby…');
+    try {
+      const response = await fetch('/api/power', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({state, device:device.id, sku:device.sku})
+      });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error);
+      show(card, `${device.name}: ${state === 'on' ? 'active' : 'standby confirmed'}.`, 'success');
+    } catch (error) {
+      show(card, `System fault: ${error.message}`, 'error');
+    } finally {
+      buttons.forEach(button => button.disabled = false);
+    }
+  }
+
+  notesEl.value = localStorage.getItem(notesKey) || '';
+  let saveTimer;
+  notesEl.addEventListener('input', () => {
+    saveStateEl.textContent = 'Saving';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      localStorage.setItem(notesKey, notesEl.value);
+      saveStateEl.textContent = 'Saved';
+    }, 250);
+  });
+  document.getElementById('clearNotes').addEventListener('click', () => {
+    notesEl.value = '';
+    localStorage.removeItem(notesKey);
+    saveStateEl.textContent = 'Cleared';
+    notesEl.focus();
+  });
+
+  loadDevices();
+</script>
+</body>
+</html>

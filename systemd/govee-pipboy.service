@@ -1,0 +1,18 @@
+[Unit]
+Description=Govee Pip-Boy Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dsa2176
+WorkingDirectory=/home/dsa2176/govee-home-control
+Environment=PYTHONUNBUFFERED=1
+Environment=VIEW=pipboy
+Environment=PORT=8082
+ExecStart=/home/dsa2176/govee-home-control/.venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

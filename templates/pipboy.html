@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#061106">
+  <title>Pip-Boy Home Control</title>
+  <style>
+    :root{
+      --bg:#020602;--panel:#071108;--panel2:#0a170b;--green:#7dff78;--bright:#b1ff9c;
+      --dim:#3f9c45;--faint:#17391a;--line:#2f7b35;--danger:#ff9b75;--shadow:rgba(77,255,92,.32);
+      font-family:"Courier New",Courier,monospace;color-scheme:dark;
+    }
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;margin:0;background:var(--bg);color:var(--green);overflow:hidden}
+    body{background:radial-gradient(circle at 45% 30%,#102b12 0,#071108 38%,#010301 100%);text-shadow:0 0 5px var(--shadow)}
+    body:before{content:"";position:fixed;inset:0;z-index:100;pointer-events:none;opacity:.27;background:repeating-linear-gradient(to bottom,transparent 0,transparent 2px,rgba(0,0,0,.58) 3px,rgba(0,0,0,.58) 4px)}
+    body:after{content:"";position:fixed;inset:0;z-index:101;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.58) 100%)}
+    button,textarea{font:inherit}
+    .case{height:100vh;width:100vw;padding:12px;background:linear-gradient(145deg,#27352a,#111a13 48%,#344035);border:4px solid #1d2b20}
+    .screen{height:100%;border:4px solid #142017;border-radius:22px;padding:16px 18px 18px;background:linear-gradient(rgba(93,255,98,.02),rgba(93,255,98,.02)),var(--panel);box-shadow:inset 0 0 50px rgba(0,0,0,.9);display:grid;grid-template-rows:auto auto 1fr;gap:12px;overflow:hidden;position:relative}
+    .screen:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(255,255,255,.018),transparent 25%,rgba(255,255,255,.018) 50%,transparent 75%);animation:flicker 9s infinite steps(1)}
+    @keyframes flicker{0%,97%,100%{opacity:.35}98%{opacity:.08}99%{opacity:.5}}
+    header{display:grid;grid-template-columns:80px 1fr auto;align-items:center;gap:16px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+    .pip{width:72px;height:72px;border:2px solid var(--green);border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:1.4rem;box-shadow:0 0 12px var(--shadow),inset 0 0 18px rgba(71,255,82,.08)}
+    h1{margin:0;font-size:clamp(1.4rem,3vw,2.6rem);letter-spacing:.14em;text-transform:uppercase}
+    .subtitle{margin-top:4px;color:var(--dim);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase}
+    .clock{text-align:right;font-size:.76rem;line-height:1.6;color:var(--bright);text-transform:uppercase}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--faint);padding-bottom:7px}
+    .tab{padding:6px 12px;color:var(--dim);font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase}.tab.active{color:#041004;background:var(--green);text-shadow:none}
+    main{min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:16px}
+    .left,.notes{min-height:0;border:2px solid var(--line);background:rgba(3,12,4,.7);box-shadow:inset 0 0 24px rgba(0,0,0,.7);position:relative}
+    .left{padding:14px;display:grid;grid-template-rows:auto 1fr;gap:12px}
+    .notes{padding:14px;display:grid;grid-template-rows:auto 1fr auto;gap:10px}
+    .corner:before,.corner:after{content:"";position:absolute;width:22px;height:22px;border-color:var(--green)}
+    .corner:before{top:6px;left:6px;border-left:2px solid;border-top:2px solid}.corner:after{right:6px;bottom:6px;border-right:2px solid;border-bottom:2px solid}
+    .section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--bright);letter-spacing:.12em;text-transform:uppercase;font-size:.84rem}
+    .status{color:var(--dim);font-size:.7rem}.status b{color:var(--green)}
+    #loading{color:var(--bright);font-size:.8rem;text-transform:uppercase}
+    #devices{min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-content:stretch}
+    .device{border:1px solid var(--line);padding:14px;background:rgba(5,18,7,.82);display:grid;grid-template-rows:auto auto auto 1fr auto;min-width:0;box-shadow:inset 0 0 20px rgba(0,0,0,.6)}
+    .device-index{font-size:.68rem;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}.device h2{margin:8px 0 4px;font-size:clamp(1rem,2vw,1.45rem);text-transform:uppercase;overflow-wrap:anywhere}.sku{font-size:.65rem;color:var(--dim);overflow-wrap:anywhere}.meter{height:8px;border:1px solid var(--dim);margin:14px 0;background:repeating-linear-gradient(90deg,var(--faint) 0 12px,transparent 12px 16px)}.meter span{display:block;width:76%;height:100%;background:repeating-linear-gradient(90deg,var(--green) 0 12px,transparent 12px 16px)}
+    .buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-self:end}
+    button{min-height:50px;border:1px solid var(--green);background:#071508;color:var(--green);text-transform:uppercase;font-weight:900;letter-spacing:.08em;cursor:pointer;text-shadow:0 0 4px var(--shadow)}button:hover{background:var(--green);color:#031003;text-shadow:none}button.off{border-color:var(--dim);color:var(--dim)}button:disabled{opacity:.45;cursor:wait}
+    .device-message{margin-top:8px;min-height:18px;font-size:.68rem;color:var(--dim);text-transform:uppercase}
+    .notes textarea{width:100%;height:100%;resize:none;border:1px solid var(--line);outline:none;background:rgba(0,8,1,.82);color:var(--bright);padding:14px;line-height:1.5;font-size:.9rem;caret-color:var(--bright);box-shadow:inset 0 0 20px rgba(0,0,0,.7)}.notes textarea:focus{border-color:var(--green);box-shadow:inset 0 0 20px rgba(0,0,0,.7),0 0 9px rgba(81,255,91,.14)}
+    .notes-footer{display:flex;justify-content:space-between;gap:10px;font-size:.67rem;color:var(--dim);text-transform:uppercase}.saved{color:var(--green)}
+    .empty{grid-column:1/-1;display:grid;place-items:center;border:1px dashed var(--dim);color:var(--dim);text-align:center;padding:20px;min-height:220px}
+    @media(max-width:950px){html,body{overflow:auto}.case{height:auto;min-height:100vh}.screen{min-height:calc(100vh - 24px);height:auto;overflow:visible}main{grid-template-columns:1fr}.left,.notes{min-height:420px}#devices{grid-template-columns:1fr 1fr}.notes{min-height:430px}}
+    @media(max-width:620px){.case{padding:6px}.screen{border-radius:14px;padding:12px}header{grid-template-columns:56px 1fr}.pip{width:52px;height:52px;font-size:1rem}.clock{grid-column:1/-1;text-align:left;border-top:1px solid var(--faint);padding-top:6px}#devices{grid-template-columns:1fr}.device{min-height:210px}.tabs{overflow:auto}.notes{min-height:360px}}
+  </style>
+</head>
+<body>
+<div class="case"><div class="screen">
+  <header>
+    <div class="pip">PB</div>
+    <div><h1>Home Control Terminal</h1><div class="subtitle">Pip-Boy Residential Systems // Sector 08</div></div>
+    <div class="clock"><div id="date">--</div><div id="time">--:--:--</div></div>
+  </header>
+  <div class="tabs"><div class="tab active">Devices</div><div class="tab">Status</div><div class="tab">Data</div><div class="tab">Log</div></div>
+  <main>
+    <section class="left corner">
+      <div class="section-title"><span>Power Distribution</span><span class="status"><b>●</b> Govee uplink</span></div>
+      <div id="loading">Scanning registered units...</div>
+      <div id="devices" hidden></div>
+    </section>
+    <aside class="notes corner">
+      <div class="section-title"><span>Personal Log</span><span class="status">Local memory</span></div>
+      <textarea id="notes" spellcheck="true" placeholder="ENTER RESIDENTIAL NOTES...\n\nExamples:\n- Replace batteries\n- Movie night 20:30\n- Turn living room lamp off before bed"></textarea>
+      <div class="notes-footer"><span>Stored on this browser only</span><span id="saveState" class="saved">Ready</span></div>
+    </aside>
+  </main>
+</div></div>
+<script>
+const loading=document.getElementById('loading');
+const devicesEl=document.getElementById('devices');
+const notes=document.getElementById('notes');
+const saveState=document.getElementById('saveState');
+const NOTES_KEY='pipboy-home-notes-v1';
+
+function clock(){const d=new Date();document.getElementById('date').textContent=d.toLocaleDateString(undefined,{weekday:'short',year:'numeric',month:'2-digit',day:'2-digit'});document.getElementById('time').textContent=d.toLocaleTimeString(undefined,{hour12:false});}
+clock();setInterval(clock,1000);
+
+notes.value=localStorage.getItem(NOTES_KEY)||'';
+let saveTimer;
+notes.addEventListener('input',()=>{saveState.textContent='Writing...';clearTimeout(saveTimer);saveTimer=setTimeout(()=>{localStorage.setItem(NOTES_KEY,notes.value);saveState.textContent='Saved';setTimeout(()=>saveState.textContent='Ready',1200)},300)});
+
+async function setPower(device,sku,state,button,message){const buttons=button.closest('.buttons').querySelectorAll('button');buttons.forEach(b=>b.disabled=true);message.textContent='TRANSMITTING COMMAND...';try{const r=await fetch('/api/power',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device,sku,state})});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'Command failed');message.textContent=`${state==='on'?'POWER RESTORED':'UNIT STANDBY'} // ${data.device||''}`;}catch(e){message.textContent='ERROR // '+e.message;}finally{buttons.forEach(b=>b.disabled=false)}}
+
+function deviceCard(d,i){const card=document.createElement('article');card.className='device';card.innerHTML=`<div class="device-index">UNIT 0${i+1}</div><h2></h2><div class="sku"></div><div><div class="meter"><span></span></div></div><div><div class="buttons"><button class="on">POWER ON</button><button class="off">STANDBY</button></div><div class="device-message">READY</div></div>`;card.querySelector('h2').textContent=d.name;card.querySelector('.sku').textContent=`MODEL ${d.sku}`;const msg=card.querySelector('.device-message');const [on,off]=card.querySelectorAll('button');on.onclick=()=>setPower(d.id,d.sku,'on',on,msg);off.onclick=()=>setPower(d.id,d.sku,'off',off,msg);return card;}
+
+async function loadDevices(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'Unable to retrieve devices');loading.hidden=true;devicesEl.hidden=false;devicesEl.innerHTML='';if(!data.devices.length){devicesEl.innerHTML='<div class="empty">NO MATCHING UNITS FOUND.<br><br>Expected: Livingroom lamp / Sleeping room lamp / TV</div>';return;}data.devices.forEach((d,i)=>devicesEl.appendChild(deviceCard(d,i)));}catch(e){loading.textContent='UPLINK ERROR // '+e.message;}}
+loadDevices();
+</script>
+</body>
+</html>
