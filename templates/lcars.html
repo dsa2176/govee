@@ -41,6 +41,12 @@
     .lamp h2 { margin:4px 0; font-size:clamp(1.25rem,2vw,2rem); font-weight:500; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .sku { color:var(--purple); font-size:.7rem; font-weight:800; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .buttons { grid-column:2; grid-row:1 / span 2; display:grid; grid-template-columns:1fr 1fr; gap:9px; align-self:stretch; padding:5px 0; }
+    .meter { grid-column:1; position:relative; height:14px; border-radius:7px; background:#241d2b; overflow:hidden; margin-top:6px; }
+    .meter span { display:block; height:100%; width:0; border-radius:7px; background:linear-gradient(90deg,var(--peach),var(--orange)); pointer-events:none; }
+    .meter input[type=range] { position:absolute; inset:-5px 0; width:100%; height:24px; margin:0; opacity:0; cursor:ew-resize; }
+    .meter:focus-within { outline:2px solid var(--text); outline-offset:2px; }
+    .meter input[type=range]:disabled { cursor:wait; }
+    .level { grid-column:1; display:flex; justify-content:space-between; font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.09em; margin-top:3px; }
     .colour { grid-column:1; display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:4px; }
     .colour-label { flex:0 0 auto; font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.09em; margin-right:4px; }
     .swatch { width:34px; height:22px; border:none; border-radius:11px; cursor:pointer; padding:0; }
@@ -115,6 +121,8 @@
     card.innerHTML = `
       <div class="lamp-info"><h2></h2><div class="sku"></div></div>
       <div class="buttons"><button class="on">Engage</button><button class="off">Standby</button></div>
+      <div class="meter" hidden><span></span></div>
+      <div class="level" hidden><span>Intensity</span><b class="level-value">--</b></div>
       <div class="colour" hidden><span class="colour-label">Chroma</span></div>
       <p class="status">System ready</p>`;
     card.querySelector('h2').textContent = device.name;
@@ -122,6 +130,7 @@
     card.querySelector('.on').addEventListener('click', () => setPower(card, device, 'on'));
     card.querySelector('.off').addEventListener('click', () => setPower(card, device, 'off'));
     colourRow(card, device);
+    meterControl(card, device);
     return card;
   }
 
@@ -199,6 +208,50 @@
       show(card, `System fault: ${error.message}`, 'error');
     } finally {
       controls.forEach(control => control.disabled = false);
+    }
+  }
+
+  function meterControl(card, device) {
+    const meter = card.querySelector('.meter');
+    const fill = meter.querySelector('span');
+    const row = card.querySelector('.level');
+    const readout = card.querySelector('.level-value');
+    if (!device.brightness) return;
+    const level = Math.min(100, Math.max(1, parseInt(device.lastBrightness, 10) || 100));
+    meter.hidden = false;
+    row.hidden = false;
+    fill.style.width = `${level}%`;
+    readout.textContent = `${level}%`;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = '1'; input.max = '100'; input.step = '1';
+    input.value = level;
+    input.title = 'Intensity';
+    input.setAttribute('aria-label', 'Intensity');
+    input.addEventListener('input', () => {
+      fill.style.width = `${input.value}%`;
+      readout.textContent = `${input.value}%`;
+    });
+    input.addEventListener('change', () => setBrightness(card, device, parseInt(input.value, 10)));
+    meter.appendChild(input);
+  }
+
+  async function setBrightness(card, device, level) {
+    const input = card.querySelector('.meter input[type=range]');
+    input.disabled = true;
+    show(card, `Setting intensity ${level}%…`);
+    try {
+      const response = await fetch('/api/brightness', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({brightness:level, device:device.id, sku:device.sku})
+      });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error);
+      show(card, `${device.name}: intensity ${level}%.`, 'success');
+    } catch (error) {
+      show(card, `System fault: ${error.message}`, 'error');
+    } finally {
+      input.disabled = false;
     }
   }
 

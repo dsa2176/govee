@@ -16,8 +16,9 @@ app = Flask(__name__)
 API_BASE = "https://openapi.api.govee.com/router/api/v1"
 API_KEY = os.getenv("GOVEE_API_KEY", "").strip()
 REQUEST_TIMEOUT = 10
-STATE_FILE = os.getenv("STATE_FILE", "last_colors.json")
+STATE_FILE = os.getenv("STATE_FILE", "device_state.json")
 DEFAULT_COLOR = "#ffffff"
+DEFAULT_BRIGHTNESS = 100
 AVAILABLE_VIEWS = ("pipboy", "lcars")
 VIEW = os.getenv("VIEW", "pipboy").strip().casefold()
 VISIBLE_DEVICE_NAMES = {
@@ -68,30 +69,50 @@ def supports_power(device: dict[str, Any]) -> bool:
     )
 
 
-def read_last_colors() -> dict[str, str]:
-    """Last colour sent to each device id. Shared by both views, survives restarts."""
+def read_state() -> dict[str, dict[str, Any]]:
+    """Last colour/brightness sent to each device id.
+
+    Shared by both views and survives restarts. A bare string value is the
+    older colour-only format and is migrated on read.
+    """
     try:
         with open(STATE_FILE, encoding="utf-8") as handle:
             data = json.load(handle)
-        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    state: dict[str, dict[str, Any]] = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            state[str(key)] = {"color": value}
+        elif isinstance(value, dict):
+            state[str(key)] = value
+    return state
 
 
-def write_last_color(device_id: str, color: str) -> None:
+def write_state(device_id: str, **fields: Any) -> None:
     """Atomic write so the two services can't interleave a partial file."""
-    colors = read_last_colors()
-    colors[device_id] = color
+    state = read_state()
+    state.setdefault(device_id, {}).update(fields)
     directory = os.path.dirname(os.path.abspath(STATE_FILE)) or "."
     try:
         handle = tempfile.NamedTemporaryFile(
             "w", dir=directory, delete=False, encoding="utf-8"
         )
         with handle:
-            json.dump(colors, handle)
+            json.dump(state, handle)
         os.replace(handle.name, STATE_FILE)
     except OSError:
         pass
+
+
+def supports_brightness(device: dict[str, Any]) -> bool:
+    return any(
+        capability.get("type") == "devices.capabilities.range"
+        and capability.get("instance") == "brightness"
+        for capability in device.get("capabilities", [])
+    )
 
 
 def supports_color(device: dict[str, Any]) -> bool:
@@ -167,6 +188,28 @@ def set_color(device_id: str, sku: str, value: int) -> dict[str, Any]:
     )
 
 
+def set_brightness(device_id: str, sku: str, value: int) -> dict[str, Any]:
+    device = find_device(device_id, sku)
+    if not supports_brightness(device):
+        raise RuntimeError(
+            f"{device.get('deviceName', 'This device')} does not support brightness"
+        )
+    return send_capability(
+        device_id, sku, "devices.capabilities.range", "brightness", value
+    )
+
+
+def parse_brightness(value: Any) -> int:
+    """Govee accepts 1-100 percent; reject anything outside that."""
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("brightness must be a whole number between 1 and 100")
+    if not 1 <= level <= 100:
+        raise ValueError("brightness must be between 1 and 100")
+    return level
+
+
 def parse_hex_colour(value: str) -> int:
     """Turn '#rrggbb' into the single integer Govee expects (0-16777215)."""
     match = re.fullmatch(r"#?([0-9a-fA-F]{6})", value.strip())
@@ -197,7 +240,7 @@ def index():
 def device_info():
     try:
         devices = dashboard_devices()
-        last_colors = read_last_colors()
+        state = read_state()
         return jsonify(
             ok=True,
             devices=[
@@ -206,8 +249,12 @@ def device_info():
                     "sku": device.get("sku"),
                     "id": device.get("device"),
                     "color": supports_color(device),
-                    "lastColor": last_colors.get(
-                        str(device.get("device")), DEFAULT_COLOR
+                    "brightness": supports_brightness(device),
+                    "lastColor": state.get(str(device.get("device")), {}).get(
+                        "color", DEFAULT_COLOR
+                    ),
+                    "lastBrightness": state.get(str(device.get("device")), {}).get(
+                        "brightness", DEFAULT_BRIGHTNESS
                     ),
                 }
                 for device in devices
@@ -254,11 +301,37 @@ def color():
 
     try:
         result = set_color(device_id, sku, value)
-        write_last_color(device_id, f"#{value:06x}")
+        write_state(device_id, color=f"#{value:06x}")
         return jsonify(
             ok=True,
             color=f"#{value:06x}",
             device=result["device"].get("deviceName"),
+        )
+    except requests.HTTPError as exc:
+        detail = exc.response.text[:500] if exc.response is not None else str(exc)
+        return jsonify(ok=False, error=f"Govee API request failed: {detail}"), 502
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+@app.post("/api/brightness")
+def brightness():
+    body = request.get_json(silent=True) or {}
+    device_id = str(body.get("device", "")).strip()
+    sku = str(body.get("sku", "")).strip()
+
+    if not device_id or not sku:
+        return jsonify(ok=False, error="device and sku are required"), 400
+    try:
+        level = parse_brightness(body.get("brightness"))
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
+
+    try:
+        result = set_brightness(device_id, sku, level)
+        write_state(device_id, brightness=level)
+        return jsonify(
+            ok=True, brightness=level, device=result["device"].get("deviceName")
         )
     except requests.HTTPError as exc:
         detail = exc.response.text[:500] if exc.response is not None else str(exc)

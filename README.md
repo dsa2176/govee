@@ -46,9 +46,16 @@ sudo systemctl enable --now govee-pipboy.service govee-lcars.service
 | `GOVEE_API_KEY` | *(required)* | Govee Developer API key |
 | `VIEW` | `pipboy` | `pipboy` or `lcars` |
 | `PORT` | `8082` | Listen port |
+| `STATE_FILE` | `device_state.json` | Where last colour/brightness is stored |
 
 ## Notes
 
+- Each device card has power buttons, an intensity bar (1-100%) and a colour
+  row (presets plus a custom picker). Controls only appear for devices that
+  report the matching capability.
+- `device_state.json` remembers the last colour and brightness *sent* to each
+  device, so both views agree and the controls survive a restart. It is
+  gitignored runtime state; delete it and the controls fall back to defaults.
 - `.env` is gitignored. Never commit your API key.
 - Some Govee models enter Wi-Fi power-save and drop off the network. The API
   then returns `Device is offline. Please check the Wi-Fi connection.`, which
