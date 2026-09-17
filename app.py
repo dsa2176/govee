@@ -64,6 +64,14 @@ def supports_power(device: dict[str, Any]) -> bool:
     )
 
 
+def supports_color(device: dict[str, Any]) -> bool:
+    return any(
+        capability.get("type") == "devices.capabilities.color_setting"
+        and capability.get("instance") == "colorRgb"
+        for capability in device.get("capabilities", [])
+    )
+
+
 def normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", name.casefold())
 
@@ -92,7 +100,9 @@ def find_device(device_id: str, sku: str) -> dict[str, Any]:
     raise RuntimeError("The selected device was not found in the LCARS dashboard")
 
 
-def set_power(device_id: str, sku: str, value: int) -> dict[str, Any]:
+def send_capability(
+    device_id: str, sku: str, capability_type: str, instance: str, value: Any
+) -> dict[str, Any]:
     device = find_device(device_id, sku)
     payload = {
         "requestId": str(uuid.uuid4()),
@@ -100,14 +110,39 @@ def set_power(device_id: str, sku: str, value: int) -> dict[str, Any]:
             "sku": device["sku"],
             "device": device["device"],
             "capability": {
-                "type": "devices.capabilities.on_off",
-                "instance": "powerSwitch",
+                "type": capability_type,
+                "instance": instance,
                 "value": value,
             },
         },
     }
     result = govee_request("POST", "/device/control", json=payload)
     return {"device": device, "result": result}
+
+
+def set_power(device_id: str, sku: str, value: int) -> dict[str, Any]:
+    return send_capability(
+        device_id, sku, "devices.capabilities.on_off", "powerSwitch", value
+    )
+
+
+def set_color(device_id: str, sku: str, value: int) -> dict[str, Any]:
+    device = find_device(device_id, sku)
+    if not supports_color(device):
+        raise RuntimeError(
+            f"{device.get('deviceName', 'This device')} does not support colour"
+        )
+    return send_capability(
+        device_id, sku, "devices.capabilities.color_setting", "colorRgb", value
+    )
+
+
+def parse_hex_colour(value: str) -> int:
+    """Turn '#rrggbb' into the single integer Govee expects (0-16777215)."""
+    match = re.fullmatch(r"#?([0-9a-fA-F]{6})", value.strip())
+    if not match:
+        raise ValueError("colour must be a hex value such as #33ff66")
+    return int(match.group(1), 16)
 
 
 @app.after_request
@@ -139,6 +174,7 @@ def device_info():
                     "name": device.get("deviceName", device.get("sku", "Govee device")),
                     "sku": device.get("sku"),
                     "id": device.get("device"),
+                    "color": supports_color(device),
                 }
                 for device in devices
             ],
@@ -162,6 +198,33 @@ def power():
     try:
         result = set_power(device_id, sku, 1 if state == "on" else 0)
         return jsonify(ok=True, state=state, device=result["device"].get("deviceName"))
+    except requests.HTTPError as exc:
+        detail = exc.response.text[:500] if exc.response is not None else str(exc)
+        return jsonify(ok=False, error=f"Govee API request failed: {detail}"), 502
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+@app.post("/api/color")
+def color():
+    body = request.get_json(silent=True) or {}
+    device_id = str(body.get("device", "")).strip()
+    sku = str(body.get("sku", "")).strip()
+
+    if not device_id or not sku:
+        return jsonify(ok=False, error="device and sku are required"), 400
+    try:
+        value = parse_hex_colour(str(body.get("color", "")))
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
+
+    try:
+        result = set_color(device_id, sku, value)
+        return jsonify(
+            ok=True,
+            color=f"#{value:06x}",
+            device=result["device"].get("deviceName"),
+        )
     except requests.HTTPError as exc:
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
         return jsonify(ok=False, error=f"Govee API request failed: {detail}"), 502

@@ -41,6 +41,12 @@
     .lamp h2 { margin:4px 0; font-size:clamp(1.25rem,2vw,2rem); font-weight:500; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .sku { color:var(--purple); font-size:.7rem; font-weight:800; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .buttons { grid-column:2; grid-row:1 / span 2; display:grid; grid-template-columns:1fr 1fr; gap:9px; align-self:stretch; padding:5px 0; }
+    .colour { grid-column:1; display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:4px; }
+    .colour-label { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.09em; margin-right:4px; }
+    .swatch { width:34px; height:22px; border:none; border-radius:11px; cursor:pointer; padding:0; }
+    .swatch:hover { outline:2px solid var(--text); outline-offset:2px; }
+    .swatch:disabled { opacity:.45; cursor:wait; }
+    .picker { width:40px; height:22px; border:none; border-radius:11px; background:var(--panel); cursor:pointer; padding:0; }
     button { border:0; border-radius:30px; min-height:56px; padding:8px 12px; color:#080808; font-size:.9rem; font-weight:900; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:transform .1s, filter .1s, opacity .1s; }
     button:hover{filter:brightness(1.12)} button:active{transform:scale(.97)} button:disabled{opacity:.45;cursor:wait} button:focus-visible{outline:3px solid #fff;outline-offset:3px}
     .on{background:var(--peach)} .off{background:var(--violet)}
@@ -109,11 +115,13 @@
     card.innerHTML = `
       <div class="lamp-info"><h2></h2><div class="sku"></div></div>
       <div class="buttons"><button class="on">Engage</button><button class="off">Standby</button></div>
+      <div class="colour" hidden><span class="colour-label">Chroma</span></div>
       <p class="status">System ready</p>`;
     card.querySelector('h2').textContent = device.name;
     card.querySelector('.sku').textContent = `Unit ${String(index + 1).padStart(2, '0')} · ${device.sku}`;
     card.querySelector('.on').addEventListener('click', () => setPower(card, device, 'on'));
     card.querySelector('.off').addEventListener('click', () => setPower(card, device, 'off'));
+    colourRow(card, device);
     return card;
   }
 
@@ -137,6 +145,53 @@
     } catch (error) {
       loadingEl.textContent = `System fault: ${error.message}`;
       loadingEl.className = 'error';
+    }
+  }
+
+  const PRESETS = [
+    ['#ff9900','Amber'], ['#ff9966','Peach'], ['#cc99cc','Purple'],
+    ['#9999ff','Violet'], ['#66ccff','Blue'], ['#ffcc66','Yellow'],
+  ];
+
+  function colourRow(card, device) {
+    const row = card.querySelector('.colour');
+    if (!device.color) return;
+    row.hidden = false;
+    for (const [hex, name] of PRESETS) {
+      const swatch = document.createElement('button');
+      swatch.className = 'swatch';
+      swatch.style.background = hex;
+      swatch.title = name;
+      swatch.setAttribute('aria-label', name);
+      swatch.addEventListener('click', () => setColour(card, device, hex));
+      row.appendChild(swatch);
+    }
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.className = 'picker';
+    picker.value = '#ff9900';
+    picker.title = 'Custom colour';
+    picker.setAttribute('aria-label', 'Custom colour');
+    picker.addEventListener('change', () => setColour(card, device, picker.value));
+    row.appendChild(picker);
+  }
+
+  async function setColour(card, device, hex) {
+    const controls = [...card.querySelectorAll('button, input[type=color]')];
+    controls.forEach(control => control.disabled = true);
+    show(card, `Setting chroma ${hex.toUpperCase()}…`);
+    try {
+      const response = await fetch('/api/color', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({color:hex, device:device.id, sku:device.sku})
+      });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error);
+      show(card, `${device.name}: chroma ${hex.toUpperCase()}.`, 'success');
+    } catch (error) {
+      show(card, `System fault: ${error.message}`, 'error');
+    } finally {
+      controls.forEach(control => control.disabled = false);
     }
   }
 
